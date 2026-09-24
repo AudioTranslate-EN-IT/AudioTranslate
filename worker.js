@@ -53,15 +53,24 @@ self.addEventListener('message', async (event) => {
   try {
     if (task === 'transcribe') {
       const { model, audio, timestamps } = event.data;
-      const pipe = await getTranscriber(id, model || 'Xenova/whisper-tiny.en');
+      const modelName = model || 'Xenova/whisper-tiny.en';
+      const pipe = await getTranscriber(id, modelName);
+
       post(id, { type: 'progress', stage: 'transcribe', progress: 0.84, title: 'Trascrizione', message: 'Analisi dell’audio in inglese…' });
-      const output = await pipe(audio, {
+
+      const generationOptions = {
         chunk_length_s: 30,
         stride_length_s: 5,
         return_timestamps: timestamps ? true : false,
-        language: 'english',
-        task: 'transcribe',
-      });
+      };
+
+      // I modelli ".en" sono English-only e non accettano language/task.
+      if (!modelName.endsWith('.en')) {
+        generationOptions.language = 'english';
+        generationOptions.task = 'transcribe';
+      }
+
+      const output = await pipe(audio, generationOptions);
       post(id, { type: 'result', data: output });
       return;
     }
@@ -70,15 +79,21 @@ self.addEventListener('message', async (event) => {
       const chunks = event.data.chunks || [];
       const pipe = await getTranslator(id);
       const translated = [];
+
       for (let i = 0; i < chunks.length; i++) {
         post(id, {
-          type: 'progress', stage: 'translate', progress: chunks.length ? i / chunks.length : 0,
-          title: 'Traduzione', message: `Traduzione blocco ${i + 1} di ${chunks.length}…`
+          type: 'progress',
+          stage: 'translate',
+          progress: chunks.length ? i / chunks.length : 0,
+          title: 'Traduzione',
+          message: `Traduzione blocco ${i + 1} di ${chunks.length}…`
         });
+
         const out = await pipe(chunks[i], { max_new_tokens: 512 });
         const item = Array.isArray(out) ? out[0] : out;
         translated.push(item?.translation_text || item?.generated_text || '');
       }
+
       post(id, { type: 'result', data: translated });
       return;
     }

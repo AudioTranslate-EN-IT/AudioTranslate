@@ -148,7 +148,7 @@ async function decodeAndResample(file) {
 
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker('./worker.js', { type: 'module' });
+  worker = new Worker('./worker.js?v=2', { type: 'module' });
   return worker;
 }
 
