@@ -1,140 +1,169 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="Trascrivi audio in inglese e traducili in italiano direttamente nel browser." />
-  <title>AudioTranslate EN → IT</title>
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <meta name="description" content="Trascrizione professionale di lezioni in inglese con esclusione delle voci italiane e traduzione automatica in italiano.">
+  <title>AudioTranslate Professional</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark">A↔</div>
-      <div>
-        <h1>AudioTranslate</h1>
-        <p>Inglese → Italiano</p>
-      </div>
+    <a class="brand" href="./">
+      <span class="brandmark">AT</span>
+      <span><strong>AudioTranslate</strong><small>Professional · EN → IT</small></span>
+    </a>
+    <div class="top-actions">
+      <span id="apiBadge" class="badge muted">Server: controllo…</span>
     </div>
-    <div class="badge">100% nel browser</div>
   </header>
 
   <main class="shell">
-    <section class="hero card">
+    <section class="hero">
       <div>
-        <p class="eyebrow">TRASCRIZIONE + TRADUZIONE</p>
-        <h2>Da audio inglese a testo italiano, senza caricare il file su un server.</h2>
-        <p class="lead">Seleziona un file audio. Il browser trascrive l'inglese e traduce il testo in italiano usando modelli AI eseguiti sul tuo dispositivo.</p>
+        <p class="eyebrow">LEZIONI · TRASCRIZIONE · TRADUZIONE</p>
+        <h1>Conserva l’inglese.<br><span>Escludi le voci italiane.</span></h1>
+        <p class="lead">Pensata per registrazioni universitarie lunghe: distingue gli interlocutori, filtra le parti in italiano e produce una trascrizione inglese pulita con traduzione italiana.</p>
       </div>
-      <div class="privacy-box">
-        <strong>Privacy</strong>
-        <span>L'audio resta sul dispositivo. I modelli AI vengono scaricati da Hugging Face al primo utilizzo.</span>
+      <div class="hero-card">
+        <div><b>01</b><span>Carica la lezione</span></div>
+        <div><b>02</b><span>Analisi voci e lingua</span></div>
+        <div><b>03</b><span>EN pulito + IT tradotto</span></div>
       </div>
     </section>
 
-    <section class="card upload-card">
-      <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Carica file audio">
-        <div class="upload-icon">🎙️</div>
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">NUOVA ELABORAZIONE</p>
+          <h2>Carica una registrazione</h2>
+        </div>
+        <span class="privacy">🔒 Elaborazione protetta sul server</span>
+      </div>
+
+      <div id="dropZone" class="drop-zone" tabindex="0">
+        <div class="upload-icon">🎙</div>
         <h3>Trascina qui il file audio</h3>
-        <p>oppure</p>
-        <button id="chooseBtn" class="primary" type="button">Scegli file</button>
-        <input id="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.mp4,.aac,.flac" hidden />
-        <small>MP3, WAV, M4A, OGG, WebM e altri formati supportati dal browser</small>
+        <p>oppure selezionalo dal computer</p>
+        <button id="chooseBtn" class="btn primary" type="button">Scegli file audio</button>
+        <input id="fileInput" type="file" hidden accept="audio/*,.mp3,.m4a,.wav,.mp4,.mpeg,.mpga,.webm">
+        <small>MP3, M4A, WAV, MP4, MPEG, WebM · anche lezioni lunghe</small>
       </div>
 
       <div id="filePanel" class="file-panel hidden">
-        <div class="file-meta">
-          <div class="file-icon">♪</div>
-          <div class="file-text">
-            <strong id="fileName">—</strong>
-            <span id="fileInfo">—</span>
-          </div>
-          <button id="removeBtn" class="ghost danger" type="button">Rimuovi</button>
+        <div class="file-icon">♪</div>
+        <div class="file-main">
+          <strong id="fileName">—</strong>
+          <span id="fileMeta">—</span>
         </div>
-        <audio id="audioPlayer" controls></audio>
+        <button id="removeBtn" class="btn ghost" type="button">Rimuovi</button>
       </div>
 
-      <div class="settings-row">
-        <label>
-          <span>Qualità trascrizione</span>
-          <select id="modelSelect">
-            <option value="Xenova/whisper-tiny.en">Rapida — Whisper Tiny</option>
-            <option value="Xenova/whisper-base.en">Più precisa — Whisper Base</option>
+      <div class="settings">
+        <label class="field">
+          <span>Modalità</span>
+          <select id="mode">
+            <option value="lecture_en">Lezione in inglese</option>
           </select>
+          <small>Ottimizzata per docente in inglese con interventi o rumori in italiano.</small>
         </label>
-        <label class="check-label">
-          <input id="timestampsCheck" type="checkbox" checked />
-          <span>Genera segmenti temporali</span>
+
+        <label class="field">
+          <span>Voci inglesi da conservare</span>
+          <select id="speakerMode">
+            <option value="all_english">Tutte le voci in inglese</option>
+            <option value="dominant_english">Solo voce inglese dominante</option>
+          </select>
+          <small>“Voce dominante” privilegia il docente principale nel singolo blocco.</small>
+        </label>
+
+        <label class="field">
+          <span>Filtro italiano</span>
+          <select id="italianFilter">
+            <option value="balanced">Bilanciato</option>
+            <option value="strict">Forte</option>
+          </select>
+          <small>Forte esclude anche segmenti misti o incerti.</small>
         </label>
       </div>
 
-      <button id="startBtn" class="primary big" type="button" disabled>Trascrivi e traduci</button>
+      <div class="checks">
+        <label><input id="keepExcluded" type="checkbox" checked> Conserva un elenco separato delle parti italiane escluse</label>
+        <label><input id="timestamps" type="checkbox" checked> Mantieni timestamp e segmenti</label>
+      </div>
+
+      <button id="startBtn" class="btn primary full" type="button" disabled>Avvia trascrizione professionale</button>
+      <p id="configWarning" class="warning hidden">Il server non è ancora configurato. Imposta l’indirizzo in <code>config.js</code>.</p>
     </section>
 
-    <section id="progressCard" class="card hidden" aria-live="polite">
+    <section id="progressCard" class="card hidden">
       <div class="progress-head">
         <div>
           <p class="eyebrow">ELABORAZIONE</p>
-          <h3 id="statusTitle">Preparazione…</h3>
+          <h2 id="statusTitle">Preparazione…</h2>
+          <p id="statusDetail" class="muted-text">Caricamento del file.</p>
         </div>
-        <span id="progressPct">0%</span>
+        <strong id="progressPct">0%</strong>
       </div>
-      <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-      <p id="statusText" class="status-text">Caricamento dei modelli AI…</p>
-    </section>
-
-    <section id="results" class="results hidden">
-      <article class="card result-card">
-        <div class="result-head">
-          <div>
-            <p class="eyebrow">ORIGINALE</p>
-            <h3>Trascrizione inglese</h3>
-          </div>
-          <div class="actions">
-            <button data-copy="englishText" class="ghost" type="button">Copia</button>
-            <button id="downloadEnBtn" class="ghost" type="button">TXT</button>
-          </div>
-        </div>
-        <textarea id="englishText" spellcheck="true" placeholder="Qui apparirà la trascrizione inglese…"></textarea>
-      </article>
-
-      <article class="card result-card italian-card">
-        <div class="result-head">
-          <div>
-            <p class="eyebrow">TRADUZIONE</p>
-            <h3>Testo italiano</h3>
-          </div>
-          <div class="actions">
-            <button data-copy="italianText" class="ghost" type="button">Copia</button>
-            <button id="downloadItBtn" class="ghost" type="button">TXT</button>
-          </div>
-        </div>
-        <textarea id="italianText" spellcheck="true" placeholder="Qui apparirà la traduzione italiana…"></textarea>
-      </article>
-    </section>
-
-    <section id="segmentsCard" class="card hidden">
-      <div class="result-head">
-        <div>
-          <p class="eyebrow">TIMELINE</p>
-          <h3>Segmenti trascritti</h3>
-        </div>
-        <button id="downloadSrtBtn" class="ghost" type="button">Scarica SRT inglese</button>
+      <div class="progress-track"><div id="progressBar"></div></div>
+      <div class="stats">
+        <div><span>Blocco</span><b id="chunkStat">—</b></div>
+        <div><span>Inglese</span><b id="englishStat">—</b></div>
+        <div><span>Italiano escluso</span><b id="italianStat">—</b></div>
       </div>
-      <div id="segmentsList" class="segments-list"></div>
     </section>
 
-    <section class="card notes">
-      <h3>Prima esecuzione</h3>
-      <p>La prima volta il browser deve scaricare i modelli AI e può richiedere diversi minuti, soprattutto con Whisper Base. Alle esecuzioni successive i file possono essere recuperati dalla cache del browser.</p>
-      <p>Per file molto lunghi è consigliato usare un computer con almeno 8 GB di RAM e Chrome/Edge aggiornato.</p>
+    <section id="results" class="hidden">
+      <div class="summary-grid">
+        <article class="metric card"><span>Durata audio</span><strong id="durationMetric">—</strong></article>
+        <article class="metric card"><span>Inglese conservato</span><strong id="englishMetric">—</strong></article>
+        <article class="metric card"><span>Italiano escluso</span><strong id="italianMetric">—</strong></article>
+        <article class="metric card"><span>Segmenti</span><strong id="segmentsMetric">—</strong></article>
+      </div>
+
+      <div class="two-col">
+        <article class="card result-card">
+          <div class="result-head">
+            <div><p class="eyebrow">ORIGINALE</p><h2>Trascrizione inglese</h2></div>
+            <div class="result-actions">
+              <button class="btn ghost" data-copy="englishText">Copia</button>
+              <button class="btn ghost" id="downloadEn">TXT</button>
+              <button class="btn ghost" id="downloadSrt">SRT</button>
+            </div>
+          </div>
+          <textarea id="englishText" spellcheck="true"></textarea>
+        </article>
+
+        <article class="card result-card">
+          <div class="result-head">
+            <div><p class="eyebrow">TRADUZIONE</p><h2>Italiano</h2></div>
+            <div class="result-actions">
+              <button class="btn ghost" data-copy="italianText">Copia</button>
+              <button class="btn ghost" id="downloadIt">TXT</button>
+            </div>
+          </div>
+          <textarea id="italianText" spellcheck="true"></textarea>
+        </article>
+      </div>
+
+      <article id="excludedCard" class="card excluded-card hidden">
+        <button id="excludedToggle" class="excluded-toggle" type="button">
+          <span><b>Parti italiane escluse</b><small>Non entrano nella trascrizione finale.</small></span>
+          <span id="excludedCount">0 segmenti</span>
+        </button>
+        <div id="excludedList" class="excluded-list hidden"></div>
+      </article>
     </section>
   </main>
 
-  <footer>AudioTranslate EN → IT · GitHub Pages · Elaborazione locale nel browser</footer>
-  <script type="module" src="./app.js"></script>
+  <footer>
+    AudioTranslate Professional · Il file originale viene eliminato dal server al termine dell’elaborazione.
+  </footer>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

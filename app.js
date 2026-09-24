@@ -1,305 +1,185 @@
 const $ = (id) => document.getElementById(id);
+const API = (window.AUDIOTRANSLATE_API || "").replace(/\/+$/, "");
 
-const dropZone = $('dropZone');
-const chooseBtn = $('chooseBtn');
-const fileInput = $('fileInput');
-const filePanel = $('filePanel');
-const fileName = $('fileName');
-const fileInfo = $('fileInfo');
-const audioPlayer = $('audioPlayer');
-const removeBtn = $('removeBtn');
-const startBtn = $('startBtn');
-const modelSelect = $('modelSelect');
-const timestampsCheck = $('timestampsCheck');
-const progressCard = $('progressCard');
-const progressBar = $('progressBar');
-const progressPct = $('progressPct');
-const statusTitle = $('statusTitle');
-const statusText = $('statusText');
-const results = $('results');
-const englishText = $('englishText');
-const italianText = $('italianText');
-const segmentsCard = $('segmentsCard');
-const segmentsList = $('segmentsList');
-const downloadEnBtn = $('downloadEnBtn');
-const downloadItBtn = $('downloadItBtn');
-const downloadSrtBtn = $('downloadSrtBtn');
+const el = {
+  apiBadge:$("apiBadge"), dropZone:$("dropZone"), chooseBtn:$("chooseBtn"), fileInput:$("fileInput"),
+  filePanel:$("filePanel"), fileName:$("fileName"), fileMeta:$("fileMeta"), removeBtn:$("removeBtn"),
+  startBtn:$("startBtn"), configWarning:$("configWarning"), mode:$("mode"), speakerMode:$("speakerMode"),
+  italianFilter:$("italianFilter"), keepExcluded:$("keepExcluded"), timestamps:$("timestamps"),
+  progressCard:$("progressCard"), statusTitle:$("statusTitle"), statusDetail:$("statusDetail"),
+  progressPct:$("progressPct"), progressBar:$("progressBar"), chunkStat:$("chunkStat"),
+  englishStat:$("englishStat"), italianStat:$("italianStat"), results:$("results"),
+  durationMetric:$("durationMetric"), englishMetric:$("englishMetric"), italianMetric:$("italianMetric"),
+  segmentsMetric:$("segmentsMetric"), englishText:$("englishText"), italianText:$("italianText"),
+  excludedCard:$("excludedCard"), excludedToggle:$("excludedToggle"), excludedList:$("excludedList"),
+  excludedCount:$("excludedCount"), downloadEn:$("downloadEn"), downloadIt:$("downloadIt"), downloadSrt:$("downloadSrt")
+};
 
 let selectedFile = null;
-let selectedUrl = null;
-let currentChunks = [];
-let worker = null;
-let isRunning = false;
+let currentJobId = null;
+let currentResult = null;
+let pollTimer = null;
 
-const formatBytes = (bytes) => {
-  const units = ['B', 'KB', 'MB', 'GB'];
-  if (!bytes) return '0 B';
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
+const fmtBytes = n => {
+  const u=["B","KB","MB","GB"]; if(!n)return"0 B";
+  const i=Math.min(Math.floor(Math.log(n)/Math.log(1024)),u.length-1);
+  return `${(n/1024**i).toFixed(i?1:0)} ${u[i]}`;
+};
+const fmtTime = sec => {
+  sec=Math.max(0,Math.round(Number(sec)||0));
+  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return h?`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`:`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+};
+const srtTime = sec => {
+  const ms=Math.max(0,Math.round((Number(sec)||0)*1000)),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000),x=ms%1000;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(x).padStart(3,"0")}`;
 };
 
-const formatTime = (seconds = 0) => {
-  const s = Math.max(0, Number(seconds) || 0);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  return h ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-};
-
-const formatSrtTime = (seconds = 0) => {
-  const ms = Math.max(0, Math.round((Number(seconds) || 0) * 1000));
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  const milli = ms % 1000;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(milli).padStart(3, '0')}`;
-};
-
-function setProgress(percent, title, text) {
-  const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
-  progressBar.style.width = `${p}%`;
-  progressPct.textContent = `${p}%`;
-  if (title) statusTitle.textContent = title;
-  if (text) statusText.textContent = text;
-}
-
-function setFile(file) {
-  if (!file) return;
-  selectedFile = file;
-  if (selectedUrl) URL.revokeObjectURL(selectedUrl);
-  selectedUrl = URL.createObjectURL(file);
-  fileName.textContent = file.name;
-  fileInfo.textContent = `${formatBytes(file.size)} · ${file.type || 'audio'}`;
-  audioPlayer.src = selectedUrl;
-  filePanel.classList.remove('hidden');
-  startBtn.disabled = false;
-  results.classList.add('hidden');
-  segmentsCard.classList.add('hidden');
-}
-
-function clearFile() {
-  if (isRunning) return;
-  selectedFile = null;
-  fileInput.value = '';
-  audioPlayer.removeAttribute('src');
-  audioPlayer.load();
-  if (selectedUrl) URL.revokeObjectURL(selectedUrl);
-  selectedUrl = null;
-  filePanel.classList.add('hidden');
-  startBtn.disabled = true;
-}
-
-chooseBtn.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    fileInput.click();
+async function checkApi(){
+  if(!API){
+    el.apiBadge.textContent="Server: da configurare"; el.apiBadge.className="badge bad";
+    el.configWarning.classList.remove("hidden"); return;
   }
-});
-fileInput.addEventListener('change', () => setFile(fileInput.files?.[0]));
-removeBtn.addEventListener('click', clearFile);
-
-['dragenter', 'dragover'].forEach((name) => dropZone.addEventListener(name, (e) => {
-  e.preventDefault();
-  dropZone.classList.add('dragover');
-}));
-['dragleave', 'drop'].forEach((name) => dropZone.addEventListener(name, (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-}));
-dropZone.addEventListener('drop', (e) => {
-  const file = e.dataTransfer?.files?.[0];
-  if (file) setFile(file);
-});
-
-async function decodeAndResample(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) throw new Error('Il browser non supporta Web Audio API. Prova Chrome o Edge aggiornato.');
-  const ctx = new AudioCtx();
-  try {
-    const buffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-    const channels = buffer.numberOfChannels;
-    const length = buffer.length;
-    const mono = new Float32Array(length);
-    for (let c = 0; c < channels; c++) {
-      const data = buffer.getChannelData(c);
-      for (let i = 0; i < length; i++) mono[i] += data[i] / channels;
-    }
-    const targetRate = 16000;
-    if (buffer.sampleRate === targetRate) return mono;
-    const ratio = buffer.sampleRate / targetRate;
-    const newLength = Math.round(mono.length / ratio);
-    const out = new Float32Array(newLength);
-    for (let i = 0; i < newLength; i++) {
-      const src = i * ratio;
-      const left = Math.floor(src);
-      const right = Math.min(left + 1, mono.length - 1);
-      const frac = src - left;
-      out[i] = mono[left] * (1 - frac) + mono[right] * frac;
-    }
-    return out;
-  } catch (error) {
-    throw new Error(`Impossibile decodificare questo formato audio nel browser. ${error.message || ''}`.trim());
-  } finally {
-    await ctx.close().catch(() => {});
+  try{
+    const r=await fetch(`${API}/api/health`,{cache:"no-store"});
+    if(!r.ok) throw new Error();
+    el.apiBadge.textContent="Server: online"; el.apiBadge.className="badge ok";
+    el.configWarning.classList.add("hidden");
+  }catch{
+    el.apiBadge.textContent="Server: non raggiungibile"; el.apiBadge.className="badge bad";
   }
 }
 
-function getWorker() {
-  if (worker) return worker;
-  worker = new Worker('./worker.js?v=2', { type: 'module' });
-  return worker;
+function selectFile(file){
+  if(!file)return;
+  selectedFile=file;
+  el.fileName.textContent=file.name;
+  el.fileMeta.textContent=`${fmtBytes(file.size)} · ${file.type||"audio"}`;
+  el.filePanel.classList.remove("hidden");
+  el.startBtn.disabled=!API;
+  el.results.classList.add("hidden");
 }
+function clearFile(){
+  selectedFile=null; el.fileInput.value=""; el.filePanel.classList.add("hidden"); el.startBtn.disabled=true;
+}
+el.chooseBtn.addEventListener("click",()=>el.fileInput.click());
+el.fileInput.addEventListener("change",()=>selectFile(el.fileInput.files?.[0]));
+el.removeBtn.addEventListener("click",clearFile);
+["dragenter","dragover"].forEach(ev=>el.dropZone.addEventListener(ev,e=>{e.preventDefault();el.dropZone.classList.add("dragover")}));
+["dragleave","drop"].forEach(ev=>el.dropZone.addEventListener(ev,e=>{e.preventDefault();el.dropZone.classList.remove("dragover")}));
+el.dropZone.addEventListener("drop",e=>selectFile(e.dataTransfer?.files?.[0]));
+el.dropZone.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();el.fileInput.click()}});
 
-function runWorker(payload, transfer = []) {
-  return new Promise((resolve, reject) => {
-    const w = getWorker();
-    const id = crypto.randomUUID();
-    const onMessage = (event) => {
-      const msg = event.data;
-      if (!msg || msg.id !== id) return;
-      if (msg.type === 'progress') {
-        const mapped = msg.stage === 'transcribe'
-          ? 15 + (msg.progress || 0) * 0.45
-          : 62 + (msg.progress || 0) * 0.34;
-        setProgress(mapped, msg.title, msg.message);
-        return;
+function setProgress(p,title,detail){
+  p=Math.max(0,Math.min(100,Math.round(p||0)));
+  el.progressPct.textContent=`${p}%`; el.progressBar.style.width=`${p}%`;
+  if(title)el.statusTitle.textContent=title; if(detail)el.statusDetail.textContent=detail;
+}
+function uploadJob(){
+  return new Promise((resolve,reject)=>{
+    const form=new FormData();
+    form.append("audio",selectedFile);
+    form.append("mode",el.mode.value);
+    form.append("speakerMode",el.speakerMode.value);
+    form.append("italianFilter",el.italianFilter.value);
+    form.append("keepExcluded",String(el.keepExcluded.checked));
+    form.append("timestamps",String(el.timestamps.checked));
+
+    const xhr=new XMLHttpRequest();
+    xhr.open("POST",`${API}/api/jobs`);
+    xhr.upload.onprogress=e=>{
+      if(e.lengthComputable){
+        const p=Math.round((e.loaded/e.total)*10);
+        setProgress(p,"Caricamento lezione",`${Math.round(e.loaded/1024/1024)} di ${Math.round(e.total/1024/1024)} MB`);
       }
-      w.removeEventListener('message', onMessage);
-      if (msg.type === 'error') reject(new Error(msg.error || 'Errore durante l’elaborazione.'));
-      else resolve(msg.data);
     };
-    w.addEventListener('message', onMessage);
-    w.postMessage({ id, ...payload }, transfer);
+    xhr.onload=()=>{
+      try{
+        const data=JSON.parse(xhr.responseText||"{}");
+        if(xhr.status<200||xhr.status>=300) throw new Error(data.error||`Errore ${xhr.status}`);
+        resolve(data);
+      }catch(err){reject(err)}
+    };
+    xhr.onerror=()=>reject(new Error("Errore di rete durante il caricamento."));
+    xhr.send(form);
   });
 }
-
-function chunkText(text, maxChars = 900) {
-  const clean = text.replace(/\s+/g, ' ').trim();
-  if (!clean) return [];
-  const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [clean];
-  const chunks = [];
-  let current = '';
-  for (const sentence of sentences) {
-    const s = sentence.trim();
-    if (!s) continue;
-    if ((current + ' ' + s).trim().length <= maxChars) {
-      current = (current + ' ' + s).trim();
-    } else {
-      if (current) chunks.push(current);
-      if (s.length <= maxChars) current = s;
-      else {
-        for (let i = 0; i < s.length; i += maxChars) chunks.push(s.slice(i, i + maxChars));
-        current = '';
-      }
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
+async function pollJob(id){
+  const r=await fetch(`${API}/api/jobs/${encodeURIComponent(id)}`,{cache:"no-store"});
+  const data=await r.json();
+  if(!r.ok)throw new Error(data.error||"Impossibile leggere lo stato.");
+  updateJobUi(data);
+  if(data.status==="completed"){currentResult=data.result; renderResult(data.result); return;}
+  if(data.status==="failed")throw new Error(data.error||"Elaborazione non riuscita.");
+  pollTimer=setTimeout(()=>pollJob(id).catch(showError),1800);
 }
-
-function renderSegments(chunks = []) {
-  segmentsList.innerHTML = '';
-  currentChunks = chunks.filter((x) => Array.isArray(x.timestamp));
-  if (!currentChunks.length) {
-    segmentsCard.classList.add('hidden');
-    return;
-  }
-  for (const chunk of currentChunks) {
-    const row = document.createElement('div');
-    row.className = 'segment';
-    const time = document.createElement('time');
-    time.textContent = `${formatTime(chunk.timestamp[0])} → ${formatTime(chunk.timestamp[1])}`;
-    const p = document.createElement('p');
-    p.textContent = (chunk.text || '').trim();
-    row.append(time, p);
-    segmentsList.appendChild(row);
-  }
-  segmentsCard.classList.remove('hidden');
+function updateJobUi(job){
+  setProgress(job.progress||10,job.statusTitle||"Elaborazione",job.statusDetail||"");
+  el.chunkStat.textContent=job.totalChunks?`${job.currentChunk||0}/${job.totalChunks}`:"—";
+  el.englishStat.textContent=job.stats?.englishSeconds!=null?fmtTime(job.stats.englishSeconds):"—";
+  el.italianStat.textContent=job.stats?.italianSeconds!=null?fmtTime(job.stats.italianSeconds):"—";
 }
-
-async function start() {
-  if (!selectedFile || isRunning) return;
-  isRunning = true;
-  startBtn.disabled = true;
-  removeBtn.disabled = true;
-  results.classList.add('hidden');
-  segmentsCard.classList.add('hidden');
-  progressCard.classList.remove('hidden');
-  englishText.value = '';
-  italianText.value = '';
-  currentChunks = [];
-
-  try {
-    setProgress(3, 'Lettura audio', 'Decodifica del file sul dispositivo…');
-    const audio = await decodeAndResample(selectedFile);
-    setProgress(12, 'Audio pronto', 'Avvio del modello Whisper…');
-
-    const transcription = await runWorker({
-      task: 'transcribe',
-      model: modelSelect.value,
-      audio,
-      timestamps: timestampsCheck.checked,
-    }, [audio.buffer]);
-
-    const transcript = (transcription.text || '').trim();
-    if (!transcript) throw new Error('Non è stato rilevato testo parlato nel file audio.');
-    englishText.value = transcript;
-    renderSegments(transcription.chunks || []);
-
-    const parts = chunkText(transcript);
-    setProgress(62, 'Traduzione', `Traduzione in italiano (${parts.length} blocchi)…`);
-    const translated = await runWorker({ task: 'translate', chunks: parts });
-    italianText.value = translated.join('\n\n').trim();
-    results.classList.remove('hidden');
-    setProgress(100, 'Completato', 'Trascrizione e traduzione terminate.');
-    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (error) {
-    console.error(error);
-    setProgress(0, 'Errore', error.message || 'Si è verificato un errore.');
-    alert(error.message || 'Si è verificato un errore.');
-  } finally {
-    isRunning = false;
-    startBtn.disabled = !selectedFile;
-    removeBtn.disabled = false;
-  }
+function renderResult(r){
+  setProgress(100,"Completato","Trascrizione e traduzione pronte.");
+  el.englishText.value=r.englishText||"";
+  el.italianText.value=r.italianText||"";
+  el.durationMetric.textContent=fmtTime(r.durationSeconds);
+  el.englishMetric.textContent=fmtTime(r.stats?.englishSeconds);
+  el.italianMetric.textContent=fmtTime(r.stats?.italianSeconds);
+  el.segmentsMetric.textContent=String(r.englishSegments?.length||0);
+  renderExcluded(r.excludedSegments||[]);
+  el.results.classList.remove("hidden");
+  el.results.scrollIntoView({behavior:"smooth",block:"start"});
 }
-startBtn.addEventListener('click', start);
+function renderExcluded(items){
+  el.excludedList.innerHTML="";
+  el.excludedCount.textContent=`${items.length} segmenti`;
+  if(!items.length||!el.keepExcluded.checked){el.excludedCard.classList.add("hidden");return}
+  for(const x of items){
+    const d=document.createElement("div"); d.className="excluded-item";
+    const t=document.createElement("time"); t.textContent=`${fmtTime(x.start)} → ${fmtTime(x.end)} · ${x.speaker||"voce"} · ${x.language||"it"}`;
+    const p=document.createElement("p"); p.textContent=x.text||"";
+    d.append(t,p);el.excludedList.appendChild(d);
+  }
+  el.excludedCard.classList.remove("hidden");
+}
+function showError(err){
+  clearTimeout(pollTimer);
+  setProgress(0,"Errore",err.message||String(err));
+  alert(err.message||String(err));
+  el.startBtn.disabled=!selectedFile||!API;
+  el.removeBtn.disabled=false;
+}
+async function start(){
+  if(!selectedFile||!API)return;
+  clearTimeout(pollTimer); currentResult=null;
+  el.startBtn.disabled=true;el.removeBtn.disabled=true;el.results.classList.add("hidden");el.progressCard.classList.remove("hidden");
+  setProgress(1,"Preparazione","Avvio dell’elaborazione professionale…");
+  try{
+    const job=await uploadJob();
+    currentJobId=job.id;
+    setProgress(11,"File ricevuto","Preparazione dei blocchi audio…");
+    await pollJob(job.id);
+  }catch(err){showError(err)}
+  finally{el.startBtn.disabled=!selectedFile||!API;el.removeBtn.disabled=false}
+}
+el.startBtn.addEventListener("click",start);
+el.excludedToggle.addEventListener("click",()=>el.excludedList.classList.toggle("hidden"));
 
-document.querySelectorAll('[data-copy]').forEach((btn) => {
-  btn.addEventListener('click', async () => {
-    const target = $(btn.dataset.copy);
-    await navigator.clipboard.writeText(target.value || '');
-    const old = btn.textContent;
-    btn.textContent = 'Copiato';
-    setTimeout(() => (btn.textContent = old), 1200);
-  });
+document.querySelectorAll("[data-copy]").forEach(btn=>btn.addEventListener("click",async()=>{
+  const t=$(btn.dataset.copy);await navigator.clipboard.writeText(t.value||"");
+  const old=btn.textContent;btn.textContent="Copiato";setTimeout(()=>btn.textContent=old,1000);
+}));
+function download(name,text,type="text/plain;charset=utf-8"){
+  const b=new Blob([text],{type}),u=URL.createObjectURL(b),a=document.createElement("a");
+  a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u);
+}
+const base=()=>((selectedFile?.name||"lezione").replace(/\.[^.]+$/,""));
+el.downloadEn.addEventListener("click",()=>download(`${base()}-EN.txt`,el.englishText.value));
+el.downloadIt.addEventListener("click",()=>download(`${base()}-IT.txt`,el.italianText.value));
+el.downloadSrt.addEventListener("click",()=>{
+  const seg=currentResult?.englishSegments||[];
+  const s=seg.map((x,i)=>`${i+1}\n${srtTime(x.start)} --> ${srtTime(x.end)}\n${x.text}\n`).join("\n");
+  download(`${base()}-EN.srt`,s,"application/x-subrip;charset=utf-8");
 });
-
-function downloadText(filename, content, type = 'text/plain;charset=utf-8') {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-const baseName = () => (selectedFile?.name || 'audio').replace(/\.[^.]+$/, '');
-downloadEnBtn.addEventListener('click', () => downloadText(`${baseName()}-EN.txt`, englishText.value));
-downloadItBtn.addEventListener('click', () => downloadText(`${baseName()}-IT.txt`, italianText.value));
-downloadSrtBtn.addEventListener('click', () => {
-  const srt = currentChunks.map((c, i) => {
-    const [start = 0, end = start] = c.timestamp || [];
-    return `${i + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${(c.text || '').trim()}\n`;
-  }).join('\n');
-  downloadText(`${baseName()}-EN.srt`, srt, 'application/x-subrip;charset=utf-8');
-});
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-}
+checkApi();

@@ -1,39 +1,68 @@
-# AudioTranslate EN → IT
+# AudioTranslate Professional v3
 
-Webapp statica per GitHub Pages che:
+Webapp pensata per registrazioni di lezioni universitarie in inglese.
 
-1. carica un file audio dal dispositivo;
-2. trascrive l'audio inglese con Whisper tramite Transformers.js;
-3. traduce il testo in italiano con `Xenova/opus-mt-en-it`;
-4. consente copia, modifica e download TXT;
-5. può generare segmenti temporali e un file SRT inglese.
+## Cosa cambia rispetto alla versione locale
 
-## Caratteristiche
+- file lunghi elaborati a blocchi;
+- separazione degli interlocutori;
+- riconoscimento e filtro inglese / italiano;
+- parti italiane escluse dalla trascrizione finale;
+- traduzione italiana segmento per segmento;
+- timestamp e SRT;
+- file audio temporanei eliminati al termine;
+- API key conservata solo nel backend.
 
-- Nessuna API key.
-- Nessun backend.
-- L'audio non viene inviato a un server dell'applicazione.
-- I modelli AI vengono scaricati dal repository Hugging Face e poi eseguiti nel browser.
-- Compatibile con GitHub Pages.
-- PWA installabile su browser compatibili.
+## Struttura
 
-## Pubblicazione su GitHub Pages
+I file nella cartella principale vanno su GitHub Pages.
+La cartella `server/` va pubblicata su un servizio Docker/Node (es. Render, Railway, Fly.io, VPS).
 
-1. Crea un nuovo repository GitHub, ad esempio `AudioTranslate-EN-IT`.
-2. Carica tutti i file di questa cartella nella root del repository.
-3. Vai in **Settings → Pages**.
-4. In **Build and deployment**, scegli **Deploy from a branch**.
-5. Seleziona **main** e cartella **/(root)**, quindi salva.
-6. Dopo la pubblicazione l'app sarà disponibile all'indirizzo indicato da GitHub Pages.
+## 1. Pubblicare il backend
 
-## Nota sulle prestazioni
+Crea un nuovo Web Service usando la cartella `server`.
+Il servizio deve usare il Dockerfile incluso.
 
-La prima esecuzione richiede il download dei modelli. Whisper Base è più preciso ma richiede più memoria e download maggiori. Per smartphone o PC meno potenti usare Whisper Tiny.
+Variabili ambiente richieste:
 
-## Modelli
+- `OPENAI_API_KEY` = la tua chiave API OpenAI
+- `ALLOWED_ORIGIN` = `https://audiotranslate-en-it.github.io`
+- `TEXT_MODEL` = `gpt-5.6-luna`
+- `TRANSCRIBE_MODEL` = `gpt-4o-transcribe-diarize`
 
-- `Xenova/whisper-tiny.en`
-- `Xenova/whisper-base.en`
-- `Xenova/opus-mt-en-it`
+Non inserire mai la chiave API in GitHub o in `config.js`.
 
-L'app usa `@huggingface/transformers` 4.3.0 dal CDN jsDelivr.
+## 2. Collegare GitHub Pages al backend
+
+Quando il backend è online, copia il suo URL pubblico.
+
+Apri `config.js` e imposta:
+
+```js
+window.AUDIOTRANSLATE_API = "https://TUO-BACKEND.example.com";
+```
+
+Poi carica/aggiorna su GitHub Pages:
+- index.html
+- styles.css
+- app.js
+- config.js
+- manifest.webmanifest
+- icon.svg
+- sw.js
+
+## Logica filtro lingua
+
+Ogni blocco viene:
+1. convertito in audio mono compresso;
+2. trascritto con speaker diarization;
+3. analizzato segmento per segmento;
+4. classificato EN / IT / MIXED / OTHER / NOISE;
+5. le parti EN vengono conservate e tradotte;
+6. le parti IT vengono escluse e, se richiesto, mostrate nel pannello “Parti italiane escluse”.
+
+La modalità “Forte” scarta anche segmenti linguistici incerti.
+
+## Nota
+
+L'uso delle API è separato dall'abbonamento ChatGPT e richiede un account API con fatturazione abilitata.

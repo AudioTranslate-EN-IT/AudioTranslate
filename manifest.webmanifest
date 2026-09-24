@@ -1,13 +1,16 @@
 {
-  "name": "AudioTranslate EN → IT",
+  "name": "AudioTranslate Professional",
   "short_name": "AudioTranslate",
   "start_url": "./",
-  "scope": "./",
   "display": "standalone",
-  "background_color": "#070b14",
-  "theme_color": "#0f172a",
-  "description": "Trascrizione di audio inglese e traduzione in italiano direttamente nel browser.",
+  "background_color": "#050a12",
+  "theme_color": "#07111f",
   "icons": [
-    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }
