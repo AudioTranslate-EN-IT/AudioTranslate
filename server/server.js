@@ -22,13 +22,27 @@ app.use(express.json({limit:"2mb"}));
 
 app.use((req,res,next)=>{
   const origin=req.headers.origin;
-  if(ALLOWED_ORIGIN==="*" || !origin || origin===ALLOWED_ORIGIN){
-    res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN==="*" ? "*" : origin);
+
+  // Le aperture dirette nel browser (per esempio /api/health)
+  // non inviano l'header Origin. In quel caso non dobbiamo
+  // impostare Access-Control-Allow-Origin con un valore undefined.
+  if(ALLOWED_ORIGIN==="*"){
+    res.setHeader("Access-Control-Allow-Origin","*");
+  }else if(origin && origin===ALLOWED_ORIGIN){
+    res.setHeader("Access-Control-Allow-Origin",origin);
   }
+
   res.setHeader("Vary","Origin");
   res.setHeader("Access-Control-Allow-Headers","Content-Type");
   res.setHeader("Access-Control-Allow-Methods","GET,POST,OPTIONS");
-  if(req.method==="OPTIONS") return res.sendStatus(204);
+
+  if(req.method==="OPTIONS"){
+    if(ALLOWED_ORIGIN!=="*" && origin && origin!==ALLOWED_ORIGIN){
+      return res.status(403).json({error:"Origin non consentita."});
+    }
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
@@ -164,7 +178,7 @@ function mergeSegments(rawSegments, analyzed, baseStart, discardBefore, settings
     const raw=rawSegments[i],a=analyzed.find(x=>x.index===i);
     if(!a)continue;
     const localStart=Number(raw.start)||0,localEnd=Number(raw.end)||localStart;
-    if(localEnd<=discardBefore) continue; // rimuove il doppione nell'overlap
+    if(localEnd<=discardBefore) continue;
     const start=baseStart+localStart,end=baseStart+localEnd;
     const english=(a.english_text||"").trim();
     const ex=(a.excluded_text||"").trim();
@@ -258,7 +272,7 @@ async function processJob(job){
   }
 }
 
-app.get("/api/health",(req,res)=>res.json({ok:true,version:"3.0.0",openaiConfigured:Boolean(OPENAI_API_KEY)}));
+app.get("/api/health",(req,res)=>res.json({ok:true,version:"3.0.1",openaiConfigured:Boolean(OPENAI_API_KEY)}));
 
 app.post("/api/jobs",upload.single("audio"),async(req,res)=>{
   if(!OPENAI_API_KEY){
@@ -290,7 +304,6 @@ app.get("/api/jobs/:id",(req,res)=>{
   res.json(publicJob(j));
 });
 
-// pulizia memoria dei job vecchi
 setInterval(()=>{
   const cutoff=Date.now()-12*60*60*1000;
   for(const [id,j] of jobs) if(j.updatedAt<cutoff) jobs.delete(id);
