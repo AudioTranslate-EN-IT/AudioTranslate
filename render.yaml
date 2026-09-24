@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: audiotranslate-en-it-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        value: https://audiotranslate-en-it.github.io
+      - key: TEXT_MODEL
+        value: gpt-5.6-luna
+      - key: TRANSCRIBE_MODEL
+        value: gpt-4o-transcribe-diarize
+      - key: CHUNK_SECONDS
+        value: "420"
+      - key: OVERLAP_SECONDS
+        value: "2"

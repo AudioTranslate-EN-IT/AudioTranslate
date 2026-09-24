@@ -19,6 +19,7 @@ let selectedFile = null;
 let currentJobId = null;
 let currentResult = null;
 let pollTimer = null;
+let serverReady = false;
 
 const fmtBytes = n => {
   const u=["B","KB","MB","GB"]; if(!n)return"0 B";
@@ -35,18 +36,48 @@ const srtTime = sec => {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")},${String(x).padStart(3,"0")}`;
 };
 
+function refreshStartState(){
+  el.startBtn.disabled = !selectedFile || !serverReady;
+}
+
 async function checkApi(){
+  serverReady=false;
+  refreshStartState();
+
   if(!API){
-    el.apiBadge.textContent="Server: da configurare"; el.apiBadge.className="badge bad";
-    el.configWarning.classList.remove("hidden"); return;
+    el.apiBadge.textContent="Server: da configurare";
+    el.apiBadge.className="badge bad";
+    el.configWarning.textContent="Il backend non è configurato. Pubblica il servizio server e imposta il suo indirizzo in config.js.";
+    el.configWarning.classList.remove("hidden");
+    return;
   }
+
+  el.apiBadge.textContent="Server: collegamento…";
+  el.apiBadge.className="badge muted";
+
   try{
     const r=await fetch(`${API}/api/health`,{cache:"no-store"});
-    if(!r.ok) throw new Error();
-    el.apiBadge.textContent="Server: online"; el.apiBadge.className="badge ok";
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    if(!data.openaiConfigured){
+      el.apiBadge.textContent="Server: chiave API mancante";
+      el.apiBadge.className="badge bad";
+      el.configWarning.textContent="Il server è online, ma manca OPENAI_API_KEY nelle variabili ambiente del backend.";
+      el.configWarning.classList.remove("hidden");
+      return;
+    }
+
+    serverReady=true;
+    el.apiBadge.textContent="Server: online";
+    el.apiBadge.className="badge ok";
     el.configWarning.classList.add("hidden");
-  }catch{
-    el.apiBadge.textContent="Server: non raggiungibile"; el.apiBadge.className="badge bad";
+    refreshStartState();
+  }catch(err){
+    el.apiBadge.textContent="Server: non raggiungibile";
+    el.apiBadge.className="badge bad";
+    el.configWarning.textContent="Il backend non è ancora online. Se lo hai appena pubblicato, attendi il completamento del deploy e riprova.";
+    el.configWarning.classList.remove("hidden");
   }
 }
 
@@ -56,11 +87,14 @@ function selectFile(file){
   el.fileName.textContent=file.name;
   el.fileMeta.textContent=`${fmtBytes(file.size)} · ${file.type||"audio"}`;
   el.filePanel.classList.remove("hidden");
-  el.startBtn.disabled=!API;
   el.results.classList.add("hidden");
+  refreshStartState();
 }
 function clearFile(){
-  selectedFile=null; el.fileInput.value=""; el.filePanel.classList.add("hidden"); el.startBtn.disabled=true;
+  selectedFile=null;
+  el.fileInput.value="";
+  el.filePanel.classList.add("hidden");
+  refreshStartState();
 }
 el.chooseBtn.addEventListener("click",()=>el.fileInput.click());
 el.fileInput.addEventListener("change",()=>selectFile(el.fileInput.files?.[0]));
@@ -72,8 +106,10 @@ el.dropZone.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.pr
 
 function setProgress(p,title,detail){
   p=Math.max(0,Math.min(100,Math.round(p||0)));
-  el.progressPct.textContent=`${p}%`; el.progressBar.style.width=`${p}%`;
-  if(title)el.statusTitle.textContent=title; if(detail)el.statusDetail.textContent=detail;
+  el.progressPct.textContent=`${p}%`;
+  el.progressBar.style.width=`${p}%`;
+  if(title)el.statusTitle.textContent=title;
+  if(detail)el.statusDetail.textContent=detail;
 }
 function uploadJob(){
   return new Promise((resolve,reject)=>{
@@ -109,7 +145,11 @@ async function pollJob(id){
   const data=await r.json();
   if(!r.ok)throw new Error(data.error||"Impossibile leggere lo stato.");
   updateJobUi(data);
-  if(data.status==="completed"){currentResult=data.result; renderResult(data.result); return;}
+  if(data.status==="completed"){
+    currentResult=data.result;
+    renderResult(data.result);
+    return;
+  }
   if(data.status==="failed")throw new Error(data.error||"Elaborazione non riuscita.");
   pollTimer=setTimeout(()=>pollJob(id).catch(showError),1800);
 }
@@ -134,12 +174,19 @@ function renderResult(r){
 function renderExcluded(items){
   el.excludedList.innerHTML="";
   el.excludedCount.textContent=`${items.length} segmenti`;
-  if(!items.length||!el.keepExcluded.checked){el.excludedCard.classList.add("hidden");return}
+  if(!items.length||!el.keepExcluded.checked){
+    el.excludedCard.classList.add("hidden");
+    return;
+  }
   for(const x of items){
-    const d=document.createElement("div"); d.className="excluded-item";
-    const t=document.createElement("time"); t.textContent=`${fmtTime(x.start)} → ${fmtTime(x.end)} · ${x.speaker||"voce"} · ${x.language||"it"}`;
-    const p=document.createElement("p"); p.textContent=x.text||"";
-    d.append(t,p);el.excludedList.appendChild(d);
+    const d=document.createElement("div");
+    d.className="excluded-item";
+    const t=document.createElement("time");
+    t.textContent=`${fmtTime(x.start)} → ${fmtTime(x.end)} · ${x.speaker||"voce"} · ${x.language||"it"}`;
+    const p=document.createElement("p");
+    p.textContent=x.text||"";
+    d.append(t,p);
+    el.excludedList.appendChild(d);
   }
   el.excludedCard.classList.remove("hidden");
 }
@@ -147,32 +194,49 @@ function showError(err){
   clearTimeout(pollTimer);
   setProgress(0,"Errore",err.message||String(err));
   alert(err.message||String(err));
-  el.startBtn.disabled=!selectedFile||!API;
+  refreshStartState();
   el.removeBtn.disabled=false;
 }
 async function start(){
-  if(!selectedFile||!API)return;
-  clearTimeout(pollTimer); currentResult=null;
-  el.startBtn.disabled=true;el.removeBtn.disabled=true;el.results.classList.add("hidden");el.progressCard.classList.remove("hidden");
+  if(!selectedFile||!serverReady)return;
+  clearTimeout(pollTimer);
+  currentResult=null;
+  el.startBtn.disabled=true;
+  el.removeBtn.disabled=true;
+  el.results.classList.add("hidden");
+  el.progressCard.classList.remove("hidden");
   setProgress(1,"Preparazione","Avvio dell’elaborazione professionale…");
   try{
     const job=await uploadJob();
     currentJobId=job.id;
     setProgress(11,"File ricevuto","Preparazione dei blocchi audio…");
     await pollJob(job.id);
-  }catch(err){showError(err)}
-  finally{el.startBtn.disabled=!selectedFile||!API;el.removeBtn.disabled=false}
+  }catch(err){
+    showError(err);
+  }finally{
+    refreshStartState();
+    el.removeBtn.disabled=false;
+  }
 }
 el.startBtn.addEventListener("click",start);
 el.excludedToggle.addEventListener("click",()=>el.excludedList.classList.toggle("hidden"));
 
 document.querySelectorAll("[data-copy]").forEach(btn=>btn.addEventListener("click",async()=>{
-  const t=$(btn.dataset.copy);await navigator.clipboard.writeText(t.value||"");
-  const old=btn.textContent;btn.textContent="Copiato";setTimeout(()=>btn.textContent=old,1000);
+  const t=$(btn.dataset.copy);
+  await navigator.clipboard.writeText(t.value||"");
+  const old=btn.textContent;
+  btn.textContent="Copiato";
+  setTimeout(()=>btn.textContent=old,1000);
 }));
 function download(name,text,type="text/plain;charset=utf-8"){
-  const b=new Blob([text],{type}),u=URL.createObjectURL(b),a=document.createElement("a");
-  a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u);
+  const b=new Blob([text],{type});
+  const u=URL.createObjectURL(b);
+  const a=document.createElement("a");
+  a.href=u;a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(u);
 }
 const base=()=>((selectedFile?.name||"lezione").replace(/\.[^.]+$/,""));
 el.downloadEn.addEventListener("click",()=>download(`${base()}-EN.txt`,el.englishText.value));
@@ -182,4 +246,6 @@ el.downloadSrt.addEventListener("click",()=>{
   const s=seg.map((x,i)=>`${i+1}\n${srtTime(x.start)} --> ${srtTime(x.end)}\n${x.text}\n`).join("\n");
   download(`${base()}-EN.srt`,s,"application/x-subrip;charset=utf-8");
 });
+
 checkApi();
+setInterval(checkApi,60000);

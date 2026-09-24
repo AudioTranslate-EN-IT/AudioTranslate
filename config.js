@@ -1,3 +1,3 @@
-// Inserisci qui l'URL pubblico del backend, SENZA slash finale.
-// Esempio: window.AUDIOTRANSLATE_API = "https://audiotranslate-api.onrender.com";
-window.AUDIOTRANSLATE_API = "";
+// Backend AudioTranslate Professional.
+// Il nome corrisponde al servizio definito in render.yaml.
+window.AUDIOTRANSLATE_API = "https://audiotranslate-en-it-api.onrender.com";
