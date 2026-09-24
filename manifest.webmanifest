@@ -1,0 +1,13 @@
+{
+  "name": "AudioTranslate EN → IT",
+  "short_name": "AudioTranslate",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#0f172a",
+  "description": "Trascrizione di audio inglese e traduzione in italiano direttamente nel browser.",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
