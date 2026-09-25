@@ -1,68 +1,38 @@
-# AudioTranslate Professional v3
+# AudioTranslate Professional v6 — GitHub + Cloudflare
 
-Webapp pensata per registrazioni di lezioni universitarie in inglese.
+Questa versione sostituisce OpenAI API, Render e il motore Whisper locale.
 
-## Cosa cambia rispetto alla versione locale
+## Architettura
+1. Il browser carica il file della lezione.
+2. FFmpeg WebAssembly divide localmente il file in M4A validi da 45/60/90 secondi.
+3. Ogni spezzone viene inviato a Cloudflare Worker.
+4. `@cf/openai/whisper-large-v3-turbo` trascrive senza forzare la lingua.
+5. `@cf/meta/llama-3.1-8b-instruct` separa EN / IT / misto / incerto.
+6. `@cf/meta/m2m100-1.2b` traduce l'inglese in italiano.
+7. Il browser ricompone TXT, SRT, VTT e JSON.
+8. Gli spezzoni audio non vengono salvati in R2 o su altri storage.
 
-- file lunghi elaborati a blocchi;
-- separazione degli interlocutori;
-- riconoscimento e filtro inglese / italiano;
-- parti italiane escluse dalla trascrizione finale;
-- traduzione italiana segmento per segmento;
-- timestamp e SRT;
-- file audio temporanei eliminati al termine;
-- API key conservata solo nel backend.
+## Perché FFmpeg nel browser
+Tagliare un M4A semplicemente a byte può produrre pezzi non validi. FFmpeg effettua un vero remux e genera piccoli M4A completi. Per gli M4A/AAC compatibili usa `-c:a copy`, quindi è veloce e senza perdita. Solo per formati non compatibili usa una conversione AAC di ripiego.
 
-## Struttura
+## Deploy con GitHub + Cloudflare
+Carica questa cartella nel repository `AudioTranslate-EN-IT/AudioTranslate` con nome `cloudflare-v6`.
 
-I file nella cartella principale vanno su GitHub Pages.
-La cartella `server/` va pubblicata su un servizio Docker/Node (es. Render, Railway, Fly.io, VPS).
+Su Cloudflare:
+1. Workers & Pages → Create / Import repository.
+2. Collega GitHub e scegli `AudioTranslate-EN-IT/AudioTranslate`.
+3. Root directory: `cloudflare-v6`.
+4. Build command: `npm run build`.
+5. Deploy command: `npx wrangler deploy`.
 
-## 1. Pubblicare il backend
+Cloudflare leggerà `wrangler.jsonc`, userà il binding Workers AI `AI` e pubblicherà frontend + API nello stesso Worker.
 
-Crea un nuovo Web Service usando la cartella `server`.
-Il servizio deve usare il Dockerfile incluso.
+Non servono `OPENAI_API_KEY`, Render o chiavi segrete nel browser.
 
-Variabili ambiente richieste:
-
-- `OPENAI_API_KEY` = la tua chiave API OpenAI
-- `ALLOWED_ORIGIN` = `https://audiotranslate-en-it.github.io`
-- `TEXT_MODEL` = `gpt-5.6-luna`
-- `TRANSCRIBE_MODEL` = `gpt-4o-transcribe-diarize`
-
-Non inserire mai la chiave API in GitHub o in `config.js`.
-
-## 2. Collegare GitHub Pages al backend
-
-Quando il backend è online, copia il suo URL pubblico.
-
-Apri `config.js` e imposta:
-
-```js
-window.AUDIOTRANSLATE_API = "https://TUO-BACKEND.example.com";
-```
-
-Poi carica/aggiorna su GitHub Pages:
-- index.html
-- styles.css
-- app.js
-- config.js
-- manifest.webmanifest
-- icon.svg
-- sw.js
-
-## Logica filtro lingua
-
-Ogni blocco viene:
-1. convertito in audio mono compresso;
-2. trascritto con speaker diarization;
-3. analizzato segmento per segmento;
-4. classificato EN / IT / MIXED / OTHER / NOISE;
-5. le parti EN vengono conservate e tradotte;
-6. le parti IT vengono escluse e, se richiesto, mostrate nel pannello “Parti italiane escluse”.
-
-La modalità “Forte” scarta anche segmenti linguistici incerti.
-
-## Nota
-
-L'uso delle API è separato dall'abbonamento ChatGPT e richiede un account API con fatturazione abilitata.
+## Impostazioni consigliate per Prima ora physical.m4a
+- Materia: `Physical Chemistry`
+- Filtro: `Forte`
+- Durata spezzoni: `60 secondi`
+- Parti italiane escluse: attive
+- Parti incerte: attive
+- Ripresa automatica: attiva
